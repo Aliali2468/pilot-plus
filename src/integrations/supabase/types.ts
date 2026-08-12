@@ -14,7 +14,377 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          state?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      playlists: {
+        Row: {
+          channel_row_id: string
+          created_at: string
+          description: string | null
+          id: string
+          item_count: number
+          playlist_id: string
+          privacy_status: string | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel_row_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          item_count?: number
+          playlist_id: string
+          privacy_status?: string | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel_row_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          item_count?: number
+          playlist_id?: string
+          privacy_status?: string | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlists_channel_row_id_fkey"
+            columns: ["channel_row_id"]
+            isOneToOne: false
+            referencedRelation: "youtube_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      upload_jobs: {
+        Row: {
+          channel_row_id: string
+          created_at: string
+          error_message: string | null
+          file_name: string | null
+          file_size: number | null
+          id: string
+          metadata: Json
+          progress: number
+          scheduled_at: string | null
+          status: string
+          updated_at: string
+          upload_url: string | null
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          channel_row_id: string
+          created_at?: string
+          error_message?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          metadata?: Json
+          progress?: number
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+          upload_url?: string | null
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          channel_row_id?: string
+          created_at?: string
+          error_message?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          metadata?: Json
+          progress?: number
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+          upload_url?: string | null
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upload_jobs_channel_row_id_fkey"
+            columns: ["channel_row_id"]
+            isOneToOne: false
+            referencedRelation: "youtube_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          category_id: string | null
+          channel_row_id: string
+          comment_count: number
+          created_at: string
+          description: string | null
+          duration: string | null
+          id: string
+          like_count: number
+          privacy_status: string | null
+          published_at: string | null
+          scheduled_at: string | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          upload_status: string | null
+          user_id: string
+          video_id: string
+          view_count: number
+        }
+        Insert: {
+          category_id?: string | null
+          channel_row_id: string
+          comment_count?: number
+          created_at?: string
+          description?: string | null
+          duration?: string | null
+          id?: string
+          like_count?: number
+          privacy_status?: string | null
+          published_at?: string | null
+          scheduled_at?: string | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          upload_status?: string | null
+          user_id: string
+          video_id: string
+          view_count?: number
+        }
+        Update: {
+          category_id?: string | null
+          channel_row_id?: string
+          comment_count?: number
+          created_at?: string
+          description?: string | null
+          duration?: string | null
+          id?: string
+          like_count?: number
+          privacy_status?: string | null
+          published_at?: string | null
+          scheduled_at?: string | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          upload_status?: string | null
+          user_id?: string
+          video_id?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_channel_row_id_fkey"
+            columns: ["channel_row_id"]
+            isOneToOne: false
+            referencedRelation: "youtube_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      youtube_channels: {
+        Row: {
+          channel_id: string
+          created_at: string
+          description: string | null
+          google_email: string | null
+          handle: string | null
+          id: string
+          last_synced_at: string | null
+          status: string
+          subscriber_count: number
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          uploads_playlist_id: string | null
+          user_id: string
+          video_count: number
+          view_count: number
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          description?: string | null
+          google_email?: string | null
+          handle?: string | null
+          id?: string
+          last_synced_at?: string | null
+          status?: string
+          subscriber_count?: number
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          uploads_playlist_id?: string | null
+          user_id: string
+          video_count?: number
+          view_count?: number
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          description?: string | null
+          google_email?: string | null
+          handle?: string | null
+          id?: string
+          last_synced_at?: string | null
+          status?: string
+          subscriber_count?: number
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          uploads_playlist_id?: string | null
+          user_id?: string
+          video_count?: number
+          view_count?: number
+        }
+        Relationships: []
+      }
+      youtube_connections: {
+        Row: {
+          access_token: string | null
+          channel_row_id: string | null
+          created_at: string
+          google_email: string | null
+          id: string
+          refresh_token: string | null
+          revoked: boolean
+          scope: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          channel_row_id?: string | null
+          created_at?: string
+          google_email?: string | null
+          id?: string
+          refresh_token?: string | null
+          revoked?: boolean
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          channel_row_id?: string | null
+          created_at?: string
+          google_email?: string | null
+          id?: string
+          refresh_token?: string | null
+          revoked?: boolean
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "youtube_connections_channel_row_id_fkey"
+            columns: ["channel_row_id"]
+            isOneToOne: false
+            referencedRelation: "youtube_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
