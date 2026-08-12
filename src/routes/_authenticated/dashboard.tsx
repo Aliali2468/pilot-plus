@@ -94,7 +94,7 @@ function Dashboard() {
           {videos.isLoading ? (
             [0, 1, 2].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)
           ) : videos.data?.videos.length ? (
-            videos.data.videos.slice(0, 5).map((v) => (
+            videos.data.videos.slice(0, 5).map((v: any) => (
               <div key={v.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
                 {v.thumbnail ? (
                   <img src={v.thumbnail} alt={v.title} className="h-12 w-20 rounded object-cover" />

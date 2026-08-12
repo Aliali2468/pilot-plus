@@ -125,7 +125,7 @@ function VideosPage() {
         <p className="text-sm text-destructive">{(videos.error as Error).message}</p>
       ) : videos.data?.videos.length ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {videos.data.videos.map((v) => (
+          {videos.data.videos.map((v: any) => (
             <Card key={v.id} className="glass-panel overflow-hidden">
               {v.thumbnail ? (
                 <img src={v.thumbnail} alt={v.title} className="h-40 w-full object-cover" />
@@ -211,7 +211,7 @@ function EditForm({
         onSubmit({
           title,
           description,
-          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+          tags: tags.split(",").map((t: string) => t.trim()).filter(Boolean),
           privacyStatus: privacy,
           publishAt: publishAt ? new Date(publishAt).toISOString() : null,
           thumbnail,

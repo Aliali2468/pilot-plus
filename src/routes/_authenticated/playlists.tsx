@@ -77,7 +77,7 @@ function PlaylistsPage() {
           ) : playlists.error ? (
             <p className="text-sm text-destructive">{(playlists.error as Error).message}</p>
           ) : playlists.data?.playlists.length ? (
-            playlists.data.playlists.map((p) => (
+            playlists.data.playlists.map((p: any) => (
               <Card key={p.id} className="glass-panel overflow-hidden">
                 {p.thumbnail ? (
                   <img src={p.thumbnail} alt={p.title} className="h-32 w-full object-cover" />
