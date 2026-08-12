@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -64,18 +63,6 @@ function AuthPage() {
     else toast.success("Account created. Check your inbox if confirmation is required.");
   };
 
-  const googleSignIn = async () => {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error("Google sign-in failed. Please try again.");
-      return;
-    }
-    if (result.redirected) return;
-    navigate({ to: "/dashboard" });
-  };
-
   return (
     <div className="hero-glow flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
@@ -92,14 +79,6 @@ function AuthPage() {
             <CardDescription>Sign in to manage your YouTube channel.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="secondary" className="w-full" onClick={googleSignIn}>
-              Continue with Google
-            </Button>
-            <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" /> or use email{" "}
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
             <Tabs defaultValue="signin">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">Sign in</TabsTrigger>
