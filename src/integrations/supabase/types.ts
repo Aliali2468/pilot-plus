@@ -153,6 +153,7 @@ export type Database = {
           file_name: string | null
           file_size: number | null
           id: string
+          idempotency_key: string | null
           metadata: Json
           progress: number
           scheduled_at: string | null
@@ -161,6 +162,7 @@ export type Database = {
           upload_url: string | null
           user_id: string
           video_id: string | null
+          video_type: string
         }
         Insert: {
           channel_row_id: string
@@ -169,6 +171,7 @@ export type Database = {
           file_name?: string | null
           file_size?: number | null
           id?: string
+          idempotency_key?: string | null
           metadata?: Json
           progress?: number
           scheduled_at?: string | null
@@ -177,6 +180,7 @@ export type Database = {
           upload_url?: string | null
           user_id: string
           video_id?: string | null
+          video_type?: string
         }
         Update: {
           channel_row_id?: string
@@ -185,6 +189,7 @@ export type Database = {
           file_name?: string | null
           file_size?: number | null
           id?: string
+          idempotency_key?: string | null
           metadata?: Json
           progress?: number
           scheduled_at?: string | null
@@ -193,6 +198,7 @@ export type Database = {
           upload_url?: string | null
           user_id?: string
           video_id?: string | null
+          video_type?: string
         }
         Relationships: [
           {
@@ -224,6 +230,7 @@ export type Database = {
           upload_status: string | null
           user_id: string
           video_id: string
+          video_type: string
           view_count: number
         }
         Insert: {
@@ -245,6 +252,7 @@ export type Database = {
           upload_status?: string | null
           user_id: string
           video_id: string
+          video_type?: string
           view_count?: number
         }
         Update: {
@@ -266,6 +274,7 @@ export type Database = {
           upload_status?: string | null
           user_id?: string
           video_id?: string
+          video_type?: string
           view_count?: number
         }
         Relationships: [
