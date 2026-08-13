@@ -307,6 +307,12 @@ export const createUploadSession = createServerFn({ method: "POST" })
         fileName: z.string(),
         fileSize: z.number().int().positive(),
         mimeType: z.string(),
+        videoType: z.enum(["long", "short"]).default("long"),
+        // Stable per-file key so a retry resumes instead of uploading twice.
+        idempotencyKey: z.string().min(8).max(200),
+        // Browser origin: Google only enables CORS on the resumable session
+        // when the initiating request carries the browser's Origin header.
+        origin: z.string().min(1),
       })
       .parse(d),
   )
@@ -314,6 +320,25 @@ export const createUploadSession = createServerFn({ method: "POST" })
     const { getActiveConnection } = await import("./youtube.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const conn = await getActiveConnection(context.userId);
+
+    // Reuse an in-flight session for the same file instead of creating a duplicate upload.
+    const { data: existing } = await supabaseAdmin
+      .from("upload_jobs")
+      .select("id, status, upload_url, video_id")
+      .eq("user_id", context.userId)
+      .eq("idempotency_key", data.idempotencyKey)
+      .maybeSingle();
+    if (existing?.video_id) {
+      return { uploadUrl: null, jobId: existing.id, alreadyUploaded: true as const };
+    }
+    if (existing?.upload_url && existing.status !== "failed") {
+      return { uploadUrl: existing.upload_url, jobId: existing.id, alreadyUploaded: false as const };
+    }
+
+    const description =
+      data.videoType === "short" && !/#shorts/i.test(data.description)
+        ? `${data.description}\n\n#Shorts`.trim()
+        : data.description;
 
     const status: Record<string, unknown> = {
       privacyStatus: data.publishAt ? "private" : data.privacyStatus,
@@ -328,13 +353,14 @@ export const createUploadSession = createServerFn({ method: "POST" })
         headers: {
           Authorization: `Bearer ${conn.accessToken}`,
           "content-type": "application/json",
+          origin: data.origin,
           "X-Upload-Content-Length": String(data.fileSize),
           "X-Upload-Content-Type": data.mimeType,
         },
         body: JSON.stringify({
           snippet: {
             title: data.title,
-            description: data.description,
+            description,
             tags: data.tags,
             categoryId: data.categoryId,
           },
@@ -357,19 +383,125 @@ export const createUploadSession = createServerFn({ method: "POST" })
         file_name: data.fileName,
         file_size: data.fileSize,
         status: "uploading",
+        video_type: data.videoType,
+        idempotency_key: data.idempotencyKey,
+        upload_url: uploadUrl,
         scheduled_at: data.publishAt ? new Date(data.publishAt).toISOString() : null,
         metadata: {
           title: data.title,
-          description: data.description,
+          description,
           tags: data.tags,
           privacyStatus: data.privacyStatus,
+          videoType: data.videoType,
         },
       })
       .select("id")
       .single();
     if (error) throw new Error(error.message);
 
-    return { uploadUrl, jobId: job.id };
+    return { uploadUrl, jobId: job.id, alreadyUploaded: false as const };
+  });
+
+/**
+ * Authoritative check with YouTube after an uncertain client-side result.
+ * Queries the resumable session (`Content-Range: bytes *​/total`) which returns
+ * the finished video resource on 200/201, or 308 when bytes are still missing.
+ */
+export const reconcileUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ jobId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { getActiveConnection, youtubeApi } = await import("./youtube.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: job, error: jobError } = await supabaseAdmin
+      .from("upload_jobs")
+      .select("*")
+      .eq("id", data.jobId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (jobError) throw new Error(jobError.message);
+    if (!job) throw new Error("Upload job not found");
+
+    const finish = async (videoId: string) => {
+      await supabaseAdmin
+        .from("upload_jobs")
+        .update({
+          status: "completed",
+          progress: 100,
+          video_id: videoId,
+          error_message: null,
+        })
+        .eq("id", job.id);
+      let uploadStatus: string | null = null;
+      try {
+        const conn = await getActiveConnection(context.userId);
+        const details = await youtubeApi<any>(conn.accessToken, "/videos", {
+          query: { part: "status,processingDetails", id: videoId },
+        });
+        uploadStatus = details.items?.[0]?.status?.uploadStatus ?? null;
+      } catch {
+        uploadStatus = null;
+      }
+      return {
+        state: "completed" as const,
+        videoId,
+        uploadStatus,
+        processing: uploadStatus === "uploaded" || uploadStatus === null,
+      };
+    };
+
+    if (job.video_id) return finish(job.video_id);
+
+    if (job.upload_url && job.file_size) {
+      const probe = await fetch(job.upload_url, {
+        method: "PUT",
+        headers: {
+          "Content-Range": `bytes */${job.file_size}`,
+          "Content-Length": "0",
+        },
+      });
+
+      if (probe.status === 200 || probe.status === 201) {
+        const body = (await probe.json().catch(() => ({}))) as any;
+        if (body?.id) return finish(body.id as string);
+      }
+      if (probe.status === 308) {
+        const range = probe.headers.get("range");
+        const received = range ? Number(range.split("-")[1] ?? 0) + 1 : 0;
+        return {
+          state: "incomplete" as const,
+          videoId: null,
+          uploadStatus: null,
+          processing: false,
+          bytesReceived: received,
+        };
+      }
+    }
+
+    // Session gone (404/410): the upload either never landed or finished earlier.
+    // Fall back to matching the most recent upload by title.
+    const title = (job.metadata as any)?.title as string | undefined;
+    if (title) {
+      try {
+        const conn = await getActiveConnection(context.userId);
+        const search = await youtubeApi<any>(conn.accessToken, "/search", {
+          query: { part: "snippet", forMine: "true", type: "video", maxResults: "5", order: "date" },
+        });
+        const match = (search.items ?? []).find(
+          (i: any) => (i.snippet?.title ?? "").trim() === title.trim(),
+        );
+        if (match?.id?.videoId) return finish(match.id.videoId as string);
+      } catch {
+        // ignore and report unknown below
+      }
+    }
+
+    await supabaseAdmin
+      .from("upload_jobs")
+      .update({ status: "failed", error_message: "Upload could not be confirmed with YouTube" })
+      .eq("id", job.id);
+    return { state: "failed" as const, videoId: null, uploadStatus: null, processing: false };
   });
 
 export const completeUpload = createServerFn({ method: "POST" })
@@ -398,6 +530,7 @@ export const completeUpload = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
 
 export const listUploadJobs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
