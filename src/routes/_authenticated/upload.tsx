@@ -189,12 +189,29 @@ function UploadPage() {
         <CardContent className="p-6">
           <form className="space-y-5" onSubmit={submit}>
             <div className="space-y-2">
+              <Label>Video type</Label>
+              <Select value={videoType} onValueChange={(v) => setVideoType(v as "long" | "short")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="long">Long Video</SelectItem>
+                  <SelectItem value="short">YouTube Short</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {videoType === "short"
+                  ? "YouTube classifies a Short by the file itself: vertical (9:16 or narrower) and 3 minutes or less. TubePilot adds a #Shorts tag to the description to reinforce it."
+                  : "Standard upload — any aspect ratio or length."}
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label>Video file</Label>
               <Input
                 type="file"
                 accept="video/*"
                 required
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
               />
             </div>
             <div className="space-y-2">
@@ -238,16 +255,44 @@ function UploadPage() {
               </div>
             </div>
 
-            {progress !== null ? (
+            {phase.kind === "uploading" ? (
               <div className="space-y-2">
-                <Progress value={progress} />
-                <p className="text-xs text-muted-foreground">Uploading… {progress}%</p>
+                <Progress value={phase.progress} />
+                <p className="text-xs text-muted-foreground">Uploading… {phase.progress}%</p>
               </div>
             ) : null}
+            {phase.kind === "verifying" ? (
+              <div className="space-y-2">
+                <Progress value={100} />
+                <p className="text-xs text-muted-foreground">
+                  Confirming the upload with YouTube…
+                </p>
+              </div>
+            ) : null}
+            {phase.kind === "processing" || phase.kind === "done" ? (
+              <p className="rounded-xl border border-border bg-card/60 p-3 text-sm">
+                {phase.kind === "processing"
+                  ? "Uploaded successfully. YouTube is processing the video."
+                  : "Uploaded and published successfully."}{" "}
+                <a
+                  className="text-primary underline"
+                  href={`https://www.youtube.com/watch?v=${phase.videoId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View on YouTube
+                </a>
+              </p>
+            ) : null}
 
-            <Button type="submit" className="w-full" disabled={progress !== null}>
-              {progress !== null ? "Uploading…" : "Upload to YouTube"}
+            <Button type="submit" className="w-full" disabled={busy}>
+              {phase.kind === "uploading"
+                ? "Uploading…"
+                : phase.kind === "verifying"
+                  ? "Verifying…"
+                  : "Upload to YouTube"}
             </Button>
+
           </form>
         </CardContent>
       </Card>
