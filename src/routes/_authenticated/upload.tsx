@@ -27,29 +27,75 @@ export const Route = createFileRoute("/_authenticated/upload")({
   component: UploadPage,
 });
 
+type Phase =
+  | { kind: "idle" }
+  | { kind: "uploading"; progress: number }
+  | { kind: "verifying" }
+  | { kind: "processing"; videoId: string }
+  | { kind: "done"; videoId: string };
+
 function UploadPage() {
   const status = useYoutubeStatus();
   const navigate = useNavigate();
   const startSession = useServerFn(createUploadSession);
   const finish = useServerFn(completeUpload);
+  const reconcile = useServerFn(reconcileUpload);
 
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
+  const [videoType, setVideoType] = useState<"long" | "short">("long");
   const [privacy, setPrivacy] = useState<"public" | "unlisted" | "private">("private");
   const [publishAt, setPublishAt] = useState("");
-  const [progress, setProgress] = useState<number | null>(null);
+  const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  // Stable per-file key so a retry after an uncertain result never uploads twice.
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+
+  const busy = phase.kind === "uploading" || phase.kind === "verifying";
+
+  const pickFile = (next: File | null) => {
+    setFile(next);
+    setIdempotencyKey(
+      next ? `${next.name}:${next.size}:${next.lastModified}:${crypto.randomUUID()}` : null,
+    );
+    setPhase({ kind: "idle" });
+  };
+
+  const settle = (jobId: string, result: Awaited<ReturnType<typeof reconcile>>) => {
+    if (result.state === "completed" && result.videoId) {
+      if (result.processing) {
+        setPhase({ kind: "processing", videoId: result.videoId });
+        toast.success("Upload complete — YouTube is still processing the video");
+      } else {
+        setPhase({ kind: "done", videoId: result.videoId });
+        toast.success("Video uploaded to YouTube");
+      }
+      setTimeout(() => navigate({ to: "/videos" }), 1200);
+      return true;
+    }
+    if (result.state === "incomplete") {
+      setPhase({ kind: "idle" });
+      toast.error("The connection dropped before YouTube received the whole file. Try again.");
+      return false;
+    }
+    setPhase({ kind: "idle" });
+    void finish({ data: { jobId, videoId: null, status: "failed", errorMessage: "Upload failed" } });
+    toast.error("Upload failed — YouTube did not receive the video");
+    return false;
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!file) {
+    if (!file || !idempotencyKey) {
       toast.error("Choose a video file first");
       return;
     }
-    setProgress(0);
+    setPhase({ kind: "uploading", progress: 0 });
+
+    let jobId: string | null = null;
     try {
-      const { uploadUrl, jobId } = await startSession({
+      const session = await startSession({
         data: {
           title,
           description,
@@ -59,37 +105,71 @@ function UploadPage() {
           fileName: file.name,
           fileSize: file.size,
           mimeType: file.type || "video/*",
+          videoType,
+          idempotencyKey,
+          origin: window.location.origin,
         },
       });
+      jobId = session.jobId;
 
-      const videoId = await new Promise<string>((resolve, reject) => {
+      // The file already reached YouTube on an earlier attempt — never re-upload.
+      if (session.alreadyUploaded || !session.uploadUrl) {
+        setPhase({ kind: "verifying" });
+        settle(jobId, await reconcile({ data: { jobId } }));
+        return;
+      }
+      const uploadUrl = session.uploadUrl;
+
+      const outcome = await new Promise<
+        { ok: true; videoId: string } | { ok: false; uncertain: boolean }
+      >((resolve) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadUrl, true);
         xhr.setRequestHeader("Content-Type", file.type || "video/*");
         xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
+          if (e.lengthComputable)
+            setPhase({ kind: "uploading", progress: Math.round((e.loaded / e.total) * 100) });
         };
+        xhr.upload.onload = () => setPhase({ kind: "verifying" });
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
-              resolve(JSON.parse(xhr.responseText).id as string);
+              resolve({ ok: true, videoId: JSON.parse(xhr.responseText).id as string });
             } catch {
-              reject(new Error("Upload finished but YouTube returned an unexpected response"));
+              resolve({ ok: false, uncertain: true });
             }
           } else {
-            reject(new Error(`Upload failed (${xhr.status})`));
+            resolve({ ok: false, uncertain: xhr.status === 0 || xhr.status >= 500 });
           }
         };
-        xhr.onerror = () => reject(new Error("Network error during upload"));
+        // A blocked/dropped response is NOT proof of failure — verify with YouTube.
+        xhr.onerror = () => resolve({ ok: false, uncertain: true });
+        xhr.ontimeout = () => resolve({ ok: false, uncertain: true });
+        xhr.onabort = () => resolve({ ok: false, uncertain: true });
         xhr.send(file);
       });
 
-      await finish({ data: { jobId, videoId, status: "completed" } });
-      toast.success("Video uploaded to YouTube");
-      setProgress(null);
-      navigate({ to: "/videos" });
+      if (outcome.ok) {
+        await finish({ data: { jobId, videoId: outcome.videoId, status: "completed" } });
+        setPhase({ kind: "done", videoId: outcome.videoId });
+        toast.success("Video uploaded to YouTube");
+        setTimeout(() => navigate({ to: "/videos" }), 1000);
+        return;
+      }
+
+      setPhase({ kind: "verifying" });
+      settle(jobId, await reconcile({ data: { jobId } }));
     } catch (error) {
-      setProgress(null);
+      if (jobId) {
+        try {
+          setPhase({ kind: "verifying" });
+          if (settle(jobId, await reconcile({ data: { jobId } }))) return;
+          return;
+        } catch {
+          /* fall through to the error toast */
+        }
+      }
+      setPhase({ kind: "idle" });
       toast.error(error instanceof Error ? error.message : "Upload failed");
     }
   };
@@ -101,6 +181,7 @@ function UploadPage() {
       </AppShell>
     );
   }
+
 
   return (
     <AppShell title="Upload video" description="Metadata, visibility and scheduling">
