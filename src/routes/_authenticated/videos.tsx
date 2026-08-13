@@ -131,11 +131,17 @@ function VideosPage() {
                 <img src={v.thumbnail} alt={v.title} className="h-40 w-full object-cover" />
               ) : null}
               <CardContent className="space-y-3 p-4">
-                <p className="line-clamp-2 text-sm font-medium">{v.title}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="line-clamp-2 text-sm font-medium">{v.title}</p>
+                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {v.isShort ? "Short" : "Long"}
+                  </span>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {v.views.toLocaleString()} views · {v.likes.toLocaleString()} likes ·{" "}
                   {v.privacyStatus}
                 </p>
+
                 <div className="flex gap-2">
                   <Button size="sm" variant="secondary" onClick={() => setEditing(v)}>
                     Edit
