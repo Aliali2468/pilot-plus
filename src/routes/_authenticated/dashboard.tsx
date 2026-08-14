@@ -6,7 +6,14 @@ import { ConnectChannel } from "@/components/connect-channel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAnalytics, useSyncChannel, useVideos, useYoutubeStatus } from "@/hooks/useYoutube";
+import {
+  useAnalytics,
+  useReconcileUpload,
+  useSyncChannel,
+  useUploadJobs,
+  useVideos,
+  useYoutubeStatus,
+} from "@/hooks/useYoutube";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
