@@ -133,7 +133,12 @@ export const listVideos = createServerFn({ method: "GET" })
       likes: Number(v.statistics?.likeCount ?? 0),
       comments: Number(v.statistics?.commentCount ?? 0),
       duration: v.contentDetails?.duration ?? null,
+      durationSeconds: isoToSeconds(v.contentDetails?.duration),
+      isShort:
+        (isoToSeconds(v.contentDetails?.duration) ?? 9999) <= 180 &&
+        /#shorts/i.test(`${v.snippet?.title ?? ""} ${v.snippet?.description ?? ""}`),
     }));
+
     return { videos, nextPageToken: search.nextPageToken ?? null };
   });
 
