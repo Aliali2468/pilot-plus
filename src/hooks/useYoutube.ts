@@ -9,9 +9,27 @@ import {
   listPlaylists,
   listUploadJobs,
   listVideos,
+  reconcileUpload,
   startYoutubeOAuth,
   syncChannel,
 } from "@/lib/youtube.functions";
+
+/** Asks YouTube for the authoritative outcome of an uncertain upload. */
+export function useReconcileUpload() {
+  const fn = useServerFn(reconcileUpload);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => fn({ data: { jobId } }),
+    onSuccess: (result) => {
+      if (result.state === "completed") toast.success("YouTube confirmed this upload");
+      else if (result.state === "incomplete") toast.error("The file never fully reached YouTube");
+      else toast.error("YouTube has no record of this upload");
+      queryClient.invalidateQueries({ queryKey: ["youtube"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+}
+
 
 export function useYoutubeStatus() {
   const fn = useServerFn(getYoutubeStatus);
