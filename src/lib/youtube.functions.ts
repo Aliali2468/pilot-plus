@@ -110,7 +110,15 @@ export const listVideos = createServerFn({ method: "GET" })
     const details = await youtubeApi<any>(conn.accessToken, "/videos", {
       query: { part: "snippet,status,statistics,contentDetails", id: ids.join(",") },
     });
+    // YouTube marks a video as a Short based on the file (vertical, <= 3 min),
+    // not on an API field, so we derive the label from duration + the #Shorts tag.
+    const isoToSeconds = (iso?: string | null) => {
+      const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso ?? "");
+      if (!m) return null;
+      return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+    };
     const videos = (details.items ?? []).map((v: any) => ({
+
       id: v.id as string,
       title: v.snippet?.title ?? "",
       description: v.snippet?.description ?? "",
