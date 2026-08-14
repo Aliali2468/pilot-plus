@@ -112,6 +112,9 @@ function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      <UploadQueue />
     </AppShell>
+
   );
 }
