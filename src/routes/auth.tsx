@@ -55,13 +55,28 @@ function AuthPage() {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: { full_name: name },
+        data: { full_name: name, display_name: name },
       },
     });
     setBusy(false);
     if (error) toast.error(error.message);
     else toast.success("Account created. Check your inbox if confirmation is required.");
   };
+
+  const resetPassword = async () => {
+    if (!email) {
+      toast.error("Enter your email address first");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) toast.error(error.message);
+    else toast.success("Password reset link sent — check your inbox.");
+  };
+
 
   return (
     <div className="hero-glow flex min-h-screen items-center justify-center px-4 py-12">
