@@ -6,7 +6,14 @@ import { ConnectChannel } from "@/components/connect-channel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAnalytics, useSyncChannel, useVideos, useYoutubeStatus } from "@/hooks/useYoutube";
+import {
+  useAnalytics,
+  useReconcileUpload,
+  useSyncChannel,
+  useUploadJobs,
+  useVideos,
+  useYoutubeStatus,
+} from "@/hooks/useYoutube";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -34,7 +41,68 @@ function Stat({ icon: Icon, label, value }: { icon: any; label: string; value: s
   );
 }
 
+const JOB_LABEL: Record<string, string> = {
+  pending: "Queued",
+  uploading: "Uploading",
+  completed: "Published on YouTube",
+  failed: "Failed",
+};
+
+function UploadQueue() {
+  const jobs = useUploadJobs();
+  const reconcile = useReconcileUpload();
+  const list = jobs.data?.jobs ?? [];
+  if (!list.length) return null;
+
+  return (
+    <Card className="glass-panel mt-6">
+      <CardHeader>
+        <CardTitle className="text-base">Upload queue</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {list.slice(0, 5).map((job: any) => (
+          <div
+            key={job.id}
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {(job.metadata?.title as string) || job.file_name || "Untitled"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {job.video_type === "short" ? "YouTube Short" : "Long Video"} ·{" "}
+                {JOB_LABEL[job.status] ?? job.status}
+                {job.error_message ? ` · ${job.error_message}` : ""}
+              </p>
+            </div>
+            {job.video_id ? (
+              <a
+                className="text-xs text-primary underline"
+                href={`https://www.youtube.com/watch?v=${job.video_id}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View
+              </a>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={reconcile.isPending}
+                onClick={() => reconcile.mutate(job.id)}
+              >
+                Check with YouTube
+              </Button>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Dashboard() {
+
   const status = useYoutubeStatus();
   const sync = useSyncChannel();
   const channel = status.data?.channels?.[0];
@@ -112,6 +180,9 @@ function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      <UploadQueue />
     </AppShell>
+
   );
 }
