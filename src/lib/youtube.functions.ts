@@ -117,6 +117,19 @@ export const listVideos = createServerFn({ method: "GET" })
       if (!m) return null;
       return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
     };
+    // Uploads made through TubePilot carry an explicit Long/Short choice.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: jobRows } = await supabaseAdmin
+      .from("upload_jobs")
+      .select("video_id, video_type")
+      .eq("user_id", context.userId)
+      .in("video_id", ids);
+    const declaredType = new Map<string, string>(
+      (jobRows ?? [])
+        .filter((r: any) => r.video_id && r.video_type)
+        .map((r: any) => [r.video_id as string, r.video_type as string]),
+    );
+
     const videos = (details.items ?? []).map((v: any) => ({
 
       id: v.id as string,
@@ -134,7 +147,11 @@ export const listVideos = createServerFn({ method: "GET" })
       comments: Number(v.statistics?.commentCount ?? 0),
       duration: v.contentDetails?.duration ?? null,
       durationSeconds: isoToSeconds(v.contentDetails?.duration),
-      isShort: (isoToSeconds(v.contentDetails?.duration) ?? 9999) <= 180,
+      videoType: declaredType.get(v.id as string) ?? null,
+      isShort:
+        declaredType.get(v.id as string) === "short" ||
+        (declaredType.get(v.id as string) !== "long" &&
+          (isoToSeconds(v.contentDetails?.duration) ?? 9999) <= 180),
 
     }));
 
