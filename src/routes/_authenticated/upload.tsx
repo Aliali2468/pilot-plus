@@ -370,6 +370,12 @@ function UploadPage() {
                 </p>
               </div>
             ) : null}
+            {phase.kind === "thumbnail" ? (
+              <div className="space-y-2">
+                <Progress value={100} />
+                <p className="text-xs text-muted-foreground">Applying your custom thumbnail…</p>
+              </div>
+            ) : null}
             {phase.kind === "processing" || phase.kind === "done" ? (
               <p className="rounded-xl border border-border bg-card/60 p-3 text-sm">
                 {phase.kind === "processing"
@@ -391,7 +397,9 @@ function UploadPage() {
                 ? "Uploading…"
                 : phase.kind === "verifying"
                   ? "Verifying…"
-                  : "Upload to YouTube"}
+                  : phase.kind === "thumbnail"
+                    ? "Applying thumbnail…"
+                    : "Upload to YouTube"}
             </Button>
 
           </form>
