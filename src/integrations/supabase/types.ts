@@ -145,8 +145,99 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_link_codes: {
+        Row: {
+          code: string
+          created_at: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      telegram_links: {
+        Row: {
+          chat_id: number
+          first_name: string | null
+          linked_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          chat_id: number
+          first_name?: string | null
+          linked_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          chat_id?: number
+          first_name?: string | null
+          linked_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      telegram_messages: {
+        Row: {
+          caption: string | null
+          chat_id: number
+          created_at: string
+          file_id: string | null
+          file_name: string | null
+          file_size: number | null
+          has_video: boolean
+          message_id: number | null
+          mime_type: string | null
+          raw_update: Json
+          update_id: number
+          user_id: string | null
+        }
+        Insert: {
+          caption?: string | null
+          chat_id: number
+          created_at?: string
+          file_id?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          has_video?: boolean
+          message_id?: number | null
+          mime_type?: string | null
+          raw_update: Json
+          update_id: number
+          user_id?: string | null
+        }
+        Update: {
+          caption?: string | null
+          chat_id?: number
+          created_at?: string
+          file_id?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          has_video?: boolean
+          message_id?: number | null
+          mime_type?: string | null
+          raw_update?: Json
+          update_id?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       upload_jobs: {
         Row: {
+          bytes_transferred: number
           channel_row_id: string
           created_at: string
           error_message: string | null
@@ -157,7 +248,10 @@ export type Database = {
           metadata: Json
           progress: number
           scheduled_at: string | null
+          source: string
           status: string
+          total_bytes: number | null
+          transfer_phase: string | null
           updated_at: string
           upload_url: string | null
           user_id: string
@@ -165,6 +259,7 @@ export type Database = {
           video_type: string
         }
         Insert: {
+          bytes_transferred?: number
           channel_row_id: string
           created_at?: string
           error_message?: string | null
@@ -175,7 +270,10 @@ export type Database = {
           metadata?: Json
           progress?: number
           scheduled_at?: string | null
+          source?: string
           status?: string
+          total_bytes?: number | null
+          transfer_phase?: string | null
           updated_at?: string
           upload_url?: string | null
           user_id: string
@@ -183,6 +281,7 @@ export type Database = {
           video_type?: string
         }
         Update: {
+          bytes_transferred?: number
           channel_row_id?: string
           created_at?: string
           error_message?: string | null
@@ -193,7 +292,10 @@ export type Database = {
           metadata?: Json
           progress?: number
           scheduled_at?: string | null
+          source?: string
           status?: string
+          total_bytes?: number | null
+          transfer_phase?: string | null
           updated_at?: string
           upload_url?: string | null
           user_id?: string
