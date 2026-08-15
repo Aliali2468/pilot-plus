@@ -40,6 +40,7 @@ type Phase =
   | { kind: "idle" }
   | { kind: "uploading"; progress: number }
   | { kind: "verifying" }
+  | { kind: "thumbnail"; videoId: string }
   | { kind: "processing"; videoId: string }
   | { kind: "done"; videoId: string };
 
@@ -49,27 +50,80 @@ function UploadPage() {
   const startSession = useServerFn(createUploadSession);
   const finish = useServerFn(completeUpload);
   const reconcile = useServerFn(reconcileUpload);
+  const putThumbnail = useServerFn(setThumbnail);
 
   const [file, setFile] = useState<File | null>(null);
+  const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [videoType, setVideoType] = useState<"long" | "short">("long");
   const [privacy, setPrivacy] = useState<"public" | "unlisted" | "private">("private");
   const [publishAt, setPublishAt] = useState("");
+  const [thumbnail, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [thumbnailNote, setThumbnailNote] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   // Stable per-file key so a retry after an uncertain result never uploads twice.
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
-  const busy = phase.kind === "uploading" || phase.kind === "verifying";
+  const busy =
+    phase.kind === "uploading" || phase.kind === "verifying" || phase.kind === "thumbnail";
+  const typeIssues = videoType === "short" ? shortsIssues(meta) : [];
 
-  const pickFile = (next: File | null) => {
+  const pickFile = async (next: File | null) => {
     setFile(next);
     setIdempotencyKey(
       next ? `${next.name}:${next.size}:${next.lastModified}:${crypto.randomUUID()}` : null,
     );
     setPhase({ kind: "idle" });
+    setMeta(next ? await probeVideoFile(next) : null);
   };
+
+  const pickThumbnail = async (next: File | null) => {
+    if (!next) {
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+      setThumbnailNote(null);
+      return;
+    }
+    const error = validateThumbnailFile(next);
+    if (error) {
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+      setThumbnailNote(error);
+      toast.error(error);
+      return;
+    }
+    const size = await loadImageMeta(next);
+    setThumbnailFile(next);
+    setThumbnailPreview(URL.createObjectURL(next));
+    setThumbnailNote(
+      size && size.width < 1280
+        ? `${size.width}×${size.height} — YouTube recommends at least 1280×720.`
+        : size
+          ? `${size.width}×${size.height} · ${(next.size / 1024).toFixed(0)} KB`
+          : null,
+    );
+  };
+
+  /** Thumbnails can only be set once the video exists on YouTube. */
+  const applyThumbnail = async (videoId: string) => {
+    if (!thumbnail) return;
+    setPhase({ kind: "thumbnail", videoId });
+    try {
+      const base64 = await fileToBase64(thumbnail);
+      await putThumbnail({ data: { videoId, base64, mimeType: thumbnail.type } });
+      toast.success("Custom thumbnail applied");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? `Video uploaded, but the thumbnail failed: ${error.message}`
+          : "Video uploaded, but the thumbnail failed",
+      );
+    }
+  };
+
 
   const settle = (jobId: string, result: Awaited<ReturnType<typeof reconcile>>) => {
     if (result.state === "completed" && result.videoId) {
