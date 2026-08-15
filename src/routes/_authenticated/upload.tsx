@@ -13,7 +13,16 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useYoutubeStatus } from "@/hooks/useYoutube";
-import { completeUpload, createUploadSession, reconcileUpload } from "@/lib/youtube.functions";
+import {
+  fileToBase64,
+  loadImageMeta,
+  probeVideoFile,
+  shortsIssues,
+  validateThumbnailFile,
+  type VideoMeta,
+} from "@/lib/media";
+import { completeUpload, createUploadSession, reconcileUpload, setThumbnail } from "@/lib/youtube.functions";
+
 
 export const Route = createFileRoute("/_authenticated/upload")({
   head: () => ({
@@ -31,6 +40,7 @@ type Phase =
   | { kind: "idle" }
   | { kind: "uploading"; progress: number }
   | { kind: "verifying" }
+  | { kind: "thumbnail"; videoId: string }
   | { kind: "processing"; videoId: string }
   | { kind: "done"; videoId: string };
 
@@ -40,30 +50,84 @@ function UploadPage() {
   const startSession = useServerFn(createUploadSession);
   const finish = useServerFn(completeUpload);
   const reconcile = useServerFn(reconcileUpload);
+  const putThumbnail = useServerFn(setThumbnail);
 
   const [file, setFile] = useState<File | null>(null);
+  const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [videoType, setVideoType] = useState<"long" | "short">("long");
   const [privacy, setPrivacy] = useState<"public" | "unlisted" | "private">("private");
   const [publishAt, setPublishAt] = useState("");
+  const [thumbnail, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [thumbnailNote, setThumbnailNote] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   // Stable per-file key so a retry after an uncertain result never uploads twice.
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
-  const busy = phase.kind === "uploading" || phase.kind === "verifying";
+  const busy =
+    phase.kind === "uploading" || phase.kind === "verifying" || phase.kind === "thumbnail";
+  const typeIssues = videoType === "short" ? shortsIssues(meta) : [];
 
-  const pickFile = (next: File | null) => {
+  const pickFile = async (next: File | null) => {
     setFile(next);
     setIdempotencyKey(
       next ? `${next.name}:${next.size}:${next.lastModified}:${crypto.randomUUID()}` : null,
     );
     setPhase({ kind: "idle" });
+    setMeta(next ? await probeVideoFile(next) : null);
   };
 
-  const settle = (jobId: string, result: Awaited<ReturnType<typeof reconcile>>) => {
+  const pickThumbnail = async (next: File | null) => {
+    if (!next) {
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+      setThumbnailNote(null);
+      return;
+    }
+    const error = validateThumbnailFile(next);
+    if (error) {
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+      setThumbnailNote(error);
+      toast.error(error);
+      return;
+    }
+    const size = await loadImageMeta(next);
+    setThumbnailFile(next);
+    setThumbnailPreview(URL.createObjectURL(next));
+    setThumbnailNote(
+      size && size.width < 1280
+        ? `${size.width}×${size.height} — YouTube recommends at least 1280×720.`
+        : size
+          ? `${size.width}×${size.height} · ${(next.size / 1024).toFixed(0)} KB`
+          : null,
+    );
+  };
+
+  /** Thumbnails can only be set once the video exists on YouTube. */
+  const applyThumbnail = async (videoId: string) => {
+    if (!thumbnail) return;
+    setPhase({ kind: "thumbnail", videoId });
+    try {
+      const base64 = await fileToBase64(thumbnail);
+      await putThumbnail({ data: { videoId, base64, mimeType: thumbnail.type } });
+      toast.success("Custom thumbnail applied");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? `Video uploaded, but the thumbnail failed: ${error.message}`
+          : "Video uploaded, but the thumbnail failed",
+      );
+    }
+  };
+
+
+  const settle = async (jobId: string, result: Awaited<ReturnType<typeof reconcile>>) => {
     if (result.state === "completed" && result.videoId) {
+      await applyThumbnail(result.videoId);
       if (result.processing) {
         setPhase({ kind: "processing", videoId: result.videoId });
         toast.success("Upload complete — YouTube is still processing the video");
@@ -85,10 +149,15 @@ function UploadPage() {
     return false;
   };
 
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!file || !idempotencyKey) {
       toast.error("Choose a video file first");
+      return;
+    }
+    if (typeIssues.length > 0) {
+      toast.error(`This file cannot become a Short: ${typeIssues.join(" and ")}.`);
       return;
     }
     setPhase({ kind: "uploading", progress: 0 });
@@ -115,7 +184,7 @@ function UploadPage() {
       // The file already reached YouTube on an earlier attempt — never re-upload.
       if (session.alreadyUploaded || !session.uploadUrl) {
         setPhase({ kind: "verifying" });
-        settle(jobId, await reconcile({ data: { jobId } }));
+        await settle(jobId, await reconcile({ data: { jobId } }));
         return;
       }
       const uploadUrl = session.uploadUrl;
@@ -151,6 +220,7 @@ function UploadPage() {
 
       if (outcome.ok) {
         await finish({ data: { jobId, videoId: outcome.videoId, status: "completed" } });
+        await applyThumbnail(outcome.videoId);
         setPhase({ kind: "done", videoId: outcome.videoId });
         toast.success("Video uploaded to YouTube");
         setTimeout(() => navigate({ to: "/videos" }), 1000);
@@ -158,12 +228,12 @@ function UploadPage() {
       }
 
       setPhase({ kind: "verifying" });
-      settle(jobId, await reconcile({ data: { jobId } }));
+      await settle(jobId, await reconcile({ data: { jobId } }));
     } catch (error) {
       if (jobId) {
         try {
           setPhase({ kind: "verifying" });
-          if (settle(jobId, await reconcile({ data: { jobId } }))) return;
+          if (await settle(jobId, await reconcile({ data: { jobId } }))) return;
           return;
         } catch {
           /* fall through to the error toast */
@@ -211,9 +281,40 @@ function UploadPage() {
                 type="file"
                 accept="video/*"
                 required
-                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => void pickFile(e.target.files?.[0] ?? null)}
               />
+              {meta ? (
+                <p className="text-xs text-muted-foreground">
+                  {meta.width}×{meta.height} · {Math.round(meta.durationSeconds)}s ·{" "}
+                  {meta.height >= meta.width ? "vertical/square" : "horizontal"}
+                </p>
+              ) : null}
+              {typeIssues.length > 0 ? (
+                <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                  YouTube will not treat this file as a Short: {typeIssues.join(" and ")}. Choose a
+                  vertical clip of 3 minutes or less, or switch to Long Video.
+                </p>
+              ) : null}
             </div>
+            <div className="space-y-2">
+              <Label>Custom thumbnail (optional)</Label>
+              <Input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={(e) => void pickThumbnail(e.target.files?.[0] ?? null)}
+              />
+              {thumbnailPreview ? (
+                <img
+                  src={thumbnailPreview}
+                  alt="Thumbnail preview"
+                  className="aspect-video w-48 rounded-lg border border-border object-cover"
+                />
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {thumbnailNote ?? "JPG or PNG, up to 2 MB, 1280×720 recommended. Applied right after the video reaches YouTube."}
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label>Title</Label>
               <Input
@@ -269,6 +370,12 @@ function UploadPage() {
                 </p>
               </div>
             ) : null}
+            {phase.kind === "thumbnail" ? (
+              <div className="space-y-2">
+                <Progress value={100} />
+                <p className="text-xs text-muted-foreground">Applying your custom thumbnail…</p>
+              </div>
+            ) : null}
             {phase.kind === "processing" || phase.kind === "done" ? (
               <p className="rounded-xl border border-border bg-card/60 p-3 text-sm">
                 {phase.kind === "processing"
@@ -290,7 +397,9 @@ function UploadPage() {
                 ? "Uploading…"
                 : phase.kind === "verifying"
                   ? "Verifying…"
-                  : "Upload to YouTube"}
+                  : phase.kind === "thumbnail"
+                    ? "Applying thumbnail…"
+                    : "Upload to YouTube"}
             </Button>
 
           </form>
