@@ -281,9 +281,40 @@ function UploadPage() {
                 type="file"
                 accept="video/*"
                 required
-                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => void pickFile(e.target.files?.[0] ?? null)}
               />
+              {meta ? (
+                <p className="text-xs text-muted-foreground">
+                  {meta.width}×{meta.height} · {Math.round(meta.durationSeconds)}s ·{" "}
+                  {meta.height >= meta.width ? "vertical/square" : "horizontal"}
+                </p>
+              ) : null}
+              {typeIssues.length > 0 ? (
+                <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                  YouTube will not treat this file as a Short: {typeIssues.join(" and ")}. Choose a
+                  vertical clip of 3 minutes or less, or switch to Long Video.
+                </p>
+              ) : null}
             </div>
+            <div className="space-y-2">
+              <Label>Custom thumbnail (optional)</Label>
+              <Input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={(e) => void pickThumbnail(e.target.files?.[0] ?? null)}
+              />
+              {thumbnailPreview ? (
+                <img
+                  src={thumbnailPreview}
+                  alt="Thumbnail preview"
+                  className="aspect-video w-48 rounded-lg border border-border object-cover"
+                />
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {thumbnailNote ?? "JPG or PNG, up to 2 MB, 1280×720 recommended. Applied right after the video reaches YouTube."}
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label>Title</Label>
               <Input
