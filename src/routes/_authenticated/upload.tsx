@@ -13,7 +13,16 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useYoutubeStatus } from "@/hooks/useYoutube";
-import { completeUpload, createUploadSession, reconcileUpload } from "@/lib/youtube.functions";
+import {
+  fileToBase64,
+  loadImageMeta,
+  probeVideoFile,
+  shortsIssues,
+  validateThumbnailFile,
+  type VideoMeta,
+} from "@/lib/media";
+import { completeUpload, createUploadSession, reconcileUpload, setThumbnail } from "@/lib/youtube.functions";
+
 
 export const Route = createFileRoute("/_authenticated/upload")({
   head: () => ({
