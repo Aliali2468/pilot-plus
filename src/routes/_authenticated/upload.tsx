@@ -156,6 +156,10 @@ function UploadPage() {
       toast.error("Choose a video file first");
       return;
     }
+    if (typeIssues.length > 0) {
+      toast.error(`This file cannot become a Short: ${typeIssues.join(" and ")}.`);
+      return;
+    }
     setPhase({ kind: "uploading", progress: 0 });
 
     let jobId: string | null = null;
@@ -180,7 +184,7 @@ function UploadPage() {
       // The file already reached YouTube on an earlier attempt — never re-upload.
       if (session.alreadyUploaded || !session.uploadUrl) {
         setPhase({ kind: "verifying" });
-        settle(jobId, await reconcile({ data: { jobId } }));
+        await settle(jobId, await reconcile({ data: { jobId } }));
         return;
       }
       const uploadUrl = session.uploadUrl;
@@ -216,6 +220,7 @@ function UploadPage() {
 
       if (outcome.ok) {
         await finish({ data: { jobId, videoId: outcome.videoId, status: "completed" } });
+        await applyThumbnail(outcome.videoId);
         setPhase({ kind: "done", videoId: outcome.videoId });
         toast.success("Video uploaded to YouTube");
         setTimeout(() => navigate({ to: "/videos" }), 1000);
@@ -223,12 +228,12 @@ function UploadPage() {
       }
 
       setPhase({ kind: "verifying" });
-      settle(jobId, await reconcile({ data: { jobId } }));
+      await settle(jobId, await reconcile({ data: { jobId } }));
     } catch (error) {
       if (jobId) {
         try {
           setPhase({ kind: "verifying" });
-          if (settle(jobId, await reconcile({ data: { jobId } }))) return;
+          if (await settle(jobId, await reconcile({ data: { jobId } }))) return;
           return;
         } catch {
           /* fall through to the error toast */
