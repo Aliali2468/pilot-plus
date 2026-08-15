@@ -125,8 +125,9 @@ function UploadPage() {
   };
 
 
-  const settle = (jobId: string, result: Awaited<ReturnType<typeof reconcile>>) => {
+  const settle = async (jobId: string, result: Awaited<ReturnType<typeof reconcile>>) => {
     if (result.state === "completed" && result.videoId) {
+      await applyThumbnail(result.videoId);
       if (result.processing) {
         setPhase({ kind: "processing", videoId: result.videoId });
         toast.success("Upload complete — YouTube is still processing the video");
@@ -147,6 +148,7 @@ function UploadPage() {
     toast.error("Upload failed — YouTube did not receive the video");
     return false;
   };
+
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
