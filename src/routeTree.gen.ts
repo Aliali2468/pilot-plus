@@ -19,6 +19,7 @@ import { Route as AuthenticatedPlaylistsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedUploadRouteImport } from './routes/_authenticated/upload'
 import { Route as AuthenticatedVideosRouteImport } from './routes/_authenticated/videos'
+import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube/oauth/callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -70,6 +71,12 @@ const AuthenticatedVideosRoute = AuthenticatedVideosRouteImport.update({
   path: '/videos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicTelegramWebhookRoute =
+  ApiPublicTelegramWebhookRouteImport.update({
+    id: '/api/public/telegram/webhook',
+    path: '/api/public/telegram/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicYoutubeOauthCallbackRoute =
   ApiPublicYoutubeOauthCallbackRouteImport.update({
     id: '/api/public/youtube/oauth/callback',
@@ -87,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/upload': typeof AuthenticatedUploadRoute
   '/videos': typeof AuthenticatedVideosRoute
+  '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
   '/api/public/youtube/oauth/callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -99,6 +107,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/upload': typeof AuthenticatedUploadRoute
   '/videos': typeof AuthenticatedVideosRoute
+  '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
   '/api/public/youtube/oauth/callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
 export interface FileRoutesById {
@@ -113,6 +122,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/upload': typeof AuthenticatedUploadRoute
   '/_authenticated/videos': typeof AuthenticatedVideosRoute
+  '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
   '/api/public/youtube/oauth/callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
 export interface FileRouteTypes {
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/upload'
     | '/videos'
+    | '/api/public/telegram/webhook'
     | '/api/public/youtube/oauth/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/upload'
     | '/videos'
+    | '/api/public/telegram/webhook'
     | '/api/public/youtube/oauth/callback'
   id:
     | '__root__'
@@ -152,6 +164,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/upload'
     | '/_authenticated/videos'
+    | '/api/public/telegram/webhook'
     | '/api/public/youtube/oauth/callback'
   fileRoutesById: FileRoutesById
 }
@@ -160,6 +173,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
   ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
 }
 
@@ -235,6 +249,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVideosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/telegram/webhook': {
+      id: '/api/public/telegram/webhook'
+      path: '/api/public/telegram/webhook'
+      fullPath: '/api/public/telegram/webhook'
+      preLoaderRoute: typeof ApiPublicTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/youtube/oauth/callback': {
       id: '/api/public/youtube/oauth/callback'
       path: '/api/public/youtube/oauth/callback'
@@ -271,6 +292,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,
   ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
 }
 export const routeTree = rootRouteImport

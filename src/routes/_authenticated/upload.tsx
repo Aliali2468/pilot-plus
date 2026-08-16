@@ -22,6 +22,8 @@ import {
   type VideoMeta,
 } from "@/lib/media";
 import { completeUpload, createUploadSession, reconcileUpload, setThumbnail } from "@/lib/youtube.functions";
+import { getJobProgress, importFromTelegram } from "@/lib/telegram.functions";
+import { useTelegramStatus } from "@/hooks/useTelegram";
 
 
 export const Route = createFileRoute("/_authenticated/upload")({
@@ -63,13 +65,23 @@ function UploadPage() {
   const [thumbnail, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailNote, setThumbnailNote] = useState<string | null>(null);
+  const [source, setSource] = useState<"device" | "telegram">("device");
+  const [transfer, setTransfer] = useState<{
+    phase: string;
+    sent: number;
+    total: number;
+    bytesPerSecond: number;
+  } | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   // Stable per-file key so a retry after an uncertain result never uploads twice.
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   const busy =
     phase.kind === "uploading" || phase.kind === "verifying" || phase.kind === "thumbnail";
-  const typeIssues = videoType === "short" ? shortsIssues(meta) : [];
+  const typeIssues = source === "device" && videoType === "short" ? shortsIssues(meta) : [];
+  const telegram = useTelegramStatus();
+  const startImport = useServerFn(importFromTelegram);
+  const readProgress = useServerFn(getJobProgress);
 
   const pickFile = async (next: File | null) => {
     setFile(next);
@@ -150,8 +162,70 @@ function UploadPage() {
   };
 
 
+  /** Polls the real server-side byte counters while the import runs. */
+  const watchJob = (idempotencyKey: string) => {
+    let previous = { bytes: 0, at: Date.now() };
+    const timer = setInterval(async () => {
+      try {
+        const job = await readProgress({ data: { idempotencyKey } });
+        if (!job) return;
+        const now = Date.now();
+        const bytes = Number(job.bytes_transferred ?? 0);
+        const seconds = Math.max((now - previous.at) / 1000, 0.001);
+        const speed = Math.max(bytes - previous.bytes, 0) / seconds;
+        previous = { bytes, at: now };
+        setTransfer({
+          phase: job.transfer_phase ?? job.status,
+          sent: bytes,
+          total: Number(job.total_bytes ?? 0),
+          bytesPerSecond: speed,
+        });
+      } catch {
+        /* transient poll failure — keep watching */
+      }
+    }, 1500);
+    return () => clearInterval(timer);
+  };
+
+  const submitTelegram = async () => {
+    const key = idempotencyKey ?? `telegram:${crypto.randomUUID()}`;
+    setIdempotencyKey(key);
+    setPhase({ kind: "uploading", progress: 0 });
+    setTransfer({ phase: "finding", sent: 0, total: 0, bytesPerSecond: 0 });
+    const stop = watchJob(key);
+    try {
+      const started = startImport({
+        data: {
+          title,
+          description,
+          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+          privacyStatus: privacy,
+          publishAt: publishAt ? new Date(publishAt).toISOString() : null,
+          videoType,
+          idempotencyKey: key,
+        },
+      });
+      const result = await started;
+      stop();
+      await applyThumbnail(result.videoId);
+      setPhase({ kind: "done", videoId: result.videoId });
+      setTransfer(null);
+      toast.success("Telegram video uploaded to YouTube");
+      setTimeout(() => navigate({ to: "/videos" }), 1200);
+    } catch (error) {
+      stop();
+      setTransfer(null);
+      setPhase({ kind: "idle" });
+      toast.error(error instanceof Error ? error.message : "Telegram import failed");
+    }
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (source === "telegram") {
+      await submitTelegram();
+      return;
+    }
     if (!file || !idempotencyKey) {
       toast.error("Choose a video file first");
       return;
@@ -259,6 +333,46 @@ function UploadPage() {
         <CardContent className="p-6">
           <form className="space-y-5" onSubmit={submit}>
             <div className="space-y-2">
+              <Label>Video source</Label>
+              <Select value={source} onValueChange={(v) => setSource(v as "device" | "telegram")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="device">Upload from device</SelectItem>
+                  <SelectItem value="telegram">Import from Telegram</SelectItem>
+                </SelectContent>
+              </Select>
+              {source === "telegram" ? (
+                <div className="rounded-xl border border-border bg-card/60 p-3 text-xs text-muted-foreground">
+                  {telegram.data?.connected ? (
+                    <>
+                      <p>
+                        Connected{telegram.data.botUsername ? ` via ${telegram.data.botUsername}` : ""}.
+                        TubePilot takes the <strong>latest</strong> message the bot received and
+                        transfers it Telegram → server → YouTube. Your device only shows progress.
+                      </p>
+                      <p className="mt-2">
+                        Latest message:{" "}
+                        {telegram.data.latestMessage?.has_video
+                          ? `${telegram.data.latestMessage.file_name} · ${(
+                              (telegram.data.latestMessage.file_size ?? 0) /
+                              1024 /
+                              1024
+                            ).toFixed(1)} MB`
+                          : "no video yet — forward the video to the bot, then reload."}
+                      </p>
+                    </>
+                  ) : (
+                    <p>
+                      Telegram is not linked yet. Open Settings → Telegram import to connect your
+                      chat with the TubePilot bot.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-2">
               <Label>Video type</Label>
               <Select value={videoType} onValueChange={(v) => setVideoType(v as "long" | "short")}>
                 <SelectTrigger>
@@ -275,6 +389,7 @@ function UploadPage() {
                   : "Standard upload — any aspect ratio or length."}
               </p>
             </div>
+            {source === "device" ? (
             <div className="space-y-2">
               <Label>Video file</Label>
               <Input
@@ -296,6 +411,7 @@ function UploadPage() {
                 </p>
               ) : null}
             </div>
+            ) : null}
             <div className="space-y-2">
               <Label>Custom thumbnail (optional)</Label>
               <Input
@@ -356,7 +472,40 @@ function UploadPage() {
               </div>
             </div>
 
-            {phase.kind === "uploading" ? (
+            {transfer ? (
+              <div className="space-y-2">
+                <Progress
+                  value={transfer.total ? Math.round((transfer.sent / transfer.total) * 100) : 0}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {transfer.phase === "finding"
+                    ? "Finding the latest Telegram message…"
+                    : transfer.phase === "downloading"
+                      ? "Starting the download from Telegram…"
+                      : transfer.phase === "transferring"
+                        ? "Telegram → TubePilot server → YouTube"
+                        : transfer.phase === "completed"
+                          ? "Transfer complete"
+                          : transfer.phase}
+                  {transfer.total
+                    ? ` · ${(transfer.sent / 1024 / 1024).toFixed(1)} / ${(
+                        transfer.total /
+                        1024 /
+                        1024
+                      ).toFixed(1)} MB · ${Math.round((transfer.sent / transfer.total) * 100)}%`
+                    : ""}
+                  {transfer.bytesPerSecond > 0
+                    ? ` · ${(transfer.bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s · ~${Math.max(
+                        Math.round(
+                          (transfer.total - transfer.sent) / Math.max(transfer.bytesPerSecond, 1),
+                        ),
+                        0,
+                      )}s left`
+                    : ""}
+                </p>
+              </div>
+            ) : null}
+            {phase.kind === "uploading" && source === "device" ? (
               <div className="space-y-2">
                 <Progress value={phase.progress} />
                 <p className="text-xs text-muted-foreground">Uploading… {phase.progress}%</p>

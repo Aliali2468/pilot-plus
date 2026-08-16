@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { ConnectChannel } from "@/components/connect-channel";
+import { TelegramSettings } from "@/components/telegram-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -131,6 +132,7 @@ function SettingsPage() {
     <AppShell title="Settings" description="Account and channel connection">
       <div className="grid max-w-3xl gap-6">
         <ProfileCard />
+        <TelegramSettings />
 
 
         {status.data?.channels?.length ? (
