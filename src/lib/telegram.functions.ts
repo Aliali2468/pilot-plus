@@ -73,18 +73,26 @@ export const unlinkTelegram = createServerFn({ method: "POST" })
 /** Live server-side transfer state for the progress UI (no simulated values). */
 export const getJobProgress = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ jobId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        jobId: z.string().uuid().optional(),
+        idempotencyKey: z.string().min(8).max(200).optional(),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: job, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("upload_jobs")
       .select("id, status, transfer_phase, bytes_transferred, total_bytes, video_id, error_message, updated_at")
-      .eq("id", data.jobId)
-      .eq("user_id", context.userId)
-      .maybeSingle();
+      .eq("user_id", context.userId);
+    if (data.jobId) query = query.eq("id", data.jobId);
+    else if (data.idempotencyKey) query = query.eq("idempotency_key", data.idempotencyKey);
+    else throw new Error("A job id or idempotency key is required");
+    const { data: job, error } = await query.maybeSingle();
     if (error) throw new Error(error.message);
-    if (!job) throw new Error("Upload job not found");
-    return job;
+    return job ?? null;
   });
 
 /**

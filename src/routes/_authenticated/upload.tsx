@@ -163,11 +163,12 @@ function UploadPage() {
 
 
   /** Polls the real server-side byte counters while the import runs. */
-  const watchJob = (jobId: string) => {
+  const watchJob = (idempotencyKey: string) => {
     let previous = { bytes: 0, at: Date.now() };
     const timer = setInterval(async () => {
       try {
-        const job = await readProgress({ data: { jobId } });
+        const job = await readProgress({ data: { idempotencyKey } });
+        if (!job) return;
         const now = Date.now();
         const bytes = Number(job.bytes_transferred ?? 0);
         const seconds = Math.max((now - previous.at) / 1000, 0.001);
@@ -191,7 +192,7 @@ function UploadPage() {
     setIdempotencyKey(key);
     setPhase({ kind: "uploading", progress: 0 });
     setTransfer({ phase: "finding", sent: 0, total: 0, bytesPerSecond: 0 });
-    let stop: (() => void) | null = null;
+    const stop = watchJob(key);
     try {
       const started = startImport({
         data: {
@@ -205,8 +206,6 @@ function UploadPage() {
         },
       });
       const result = await started;
-      stop?.();
-      stop = watchJob(result.jobId);
       stop();
       await applyThumbnail(result.videoId);
       setPhase({ kind: "done", videoId: result.videoId });
@@ -214,7 +213,7 @@ function UploadPage() {
       toast.success("Telegram video uploaded to YouTube");
       setTimeout(() => navigate({ to: "/videos" }), 1200);
     } catch (error) {
-      stop?.();
+      stop();
       setTransfer(null);
       setPhase({ kind: "idle" });
       toast.error(error instanceof Error ? error.message : "Telegram import failed");
