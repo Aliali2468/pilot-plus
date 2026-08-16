@@ -22,6 +22,8 @@ import {
   type VideoMeta,
 } from "@/lib/media";
 import { completeUpload, createUploadSession, reconcileUpload, setThumbnail } from "@/lib/youtube.functions";
+import { getJobProgress, importFromTelegram } from "@/lib/telegram.functions";
+import { useTelegramStatus } from "@/hooks/useTelegram";
 
 
 export const Route = createFileRoute("/_authenticated/upload")({
@@ -63,13 +65,23 @@ function UploadPage() {
   const [thumbnail, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailNote, setThumbnailNote] = useState<string | null>(null);
+  const [source, setSource] = useState<"device" | "telegram">("device");
+  const [transfer, setTransfer] = useState<{
+    phase: string;
+    sent: number;
+    total: number;
+    bytesPerSecond: number;
+  } | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   // Stable per-file key so a retry after an uncertain result never uploads twice.
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   const busy =
     phase.kind === "uploading" || phase.kind === "verifying" || phase.kind === "thumbnail";
-  const typeIssues = videoType === "short" ? shortsIssues(meta) : [];
+  const typeIssues = source === "device" && videoType === "short" ? shortsIssues(meta) : [];
+  const telegram = useTelegramStatus();
+  const startImport = useServerFn(importFromTelegram);
+  const readProgress = useServerFn(getJobProgress);
 
   const pickFile = async (next: File | null) => {
     setFile(next);
@@ -150,8 +162,71 @@ function UploadPage() {
   };
 
 
+  /** Polls the real server-side byte counters while the import runs. */
+  const watchJob = (jobId: string) => {
+    let previous = { bytes: 0, at: Date.now() };
+    const timer = setInterval(async () => {
+      try {
+        const job = await readProgress({ data: { jobId } });
+        const now = Date.now();
+        const bytes = Number(job.bytes_transferred ?? 0);
+        const seconds = Math.max((now - previous.at) / 1000, 0.001);
+        const speed = Math.max(bytes - previous.bytes, 0) / seconds;
+        previous = { bytes, at: now };
+        setTransfer({
+          phase: job.transfer_phase ?? job.status,
+          sent: bytes,
+          total: Number(job.total_bytes ?? 0),
+          bytesPerSecond: speed,
+        });
+      } catch {
+        /* transient poll failure — keep watching */
+      }
+    }, 1500);
+    return () => clearInterval(timer);
+  };
+
+  const submitTelegram = async () => {
+    const key = idempotencyKey ?? `telegram:${crypto.randomUUID()}`;
+    setIdempotencyKey(key);
+    setPhase({ kind: "uploading", progress: 0 });
+    setTransfer({ phase: "finding", sent: 0, total: 0, bytesPerSecond: 0 });
+    let stop: (() => void) | null = null;
+    try {
+      const started = startImport({
+        data: {
+          title,
+          description,
+          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+          privacyStatus: privacy,
+          publishAt: publishAt ? new Date(publishAt).toISOString() : null,
+          videoType,
+          idempotencyKey: key,
+        },
+      });
+      const result = await started;
+      stop?.();
+      stop = watchJob(result.jobId);
+      stop();
+      await applyThumbnail(result.videoId);
+      setPhase({ kind: "done", videoId: result.videoId });
+      setTransfer(null);
+      toast.success("Telegram video uploaded to YouTube");
+      setTimeout(() => navigate({ to: "/videos" }), 1200);
+    } catch (error) {
+      stop?.();
+      setTransfer(null);
+      setPhase({ kind: "idle" });
+      toast.error(error instanceof Error ? error.message : "Telegram import failed");
+    }
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (source === "telegram") {
+      await submitTelegram();
+      return;
+    }
     if (!file || !idempotencyKey) {
       toast.error("Choose a video file first");
       return;
