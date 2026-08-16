@@ -167,8 +167,16 @@ export const importFromTelegram = createServerFn({ method: "POST" })
           .single()
       ).data!.id;
 
-    const patch = (fields: Record<string, unknown>) =>
-      supabaseAdmin.from("upload_jobs").update(fields).eq("id", jobId);
+    const patch = (fields: Partial<{
+      status: string;
+      transfer_phase: string;
+      bytes_transferred: number;
+      total_bytes: number;
+      progress: number;
+      upload_url: string;
+      video_id: string;
+      error_message: string | null;
+    }>) => supabaseAdmin.from("upload_jobs").update(fields).eq("id", jobId);
 
     try {
       await patch({ transfer_phase: "downloading", bytes_transferred: 0 });
