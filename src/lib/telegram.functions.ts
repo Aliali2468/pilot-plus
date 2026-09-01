@@ -45,12 +45,20 @@ export const createTelegramLinkCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // A new attempt invalidates every previous unused code for this account.
+    await supabaseAdmin
+      .from("telegram_link_codes")
+      .delete()
+      .eq("user_id", context.userId)
+      .is("used_at", null);
+
     const code = Array.from(crypto.getRandomValues(new Uint8Array(8)))
       .map((b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32])
       .join("");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     const { error } = await supabaseAdmin
       .from("telegram_link_codes")
-      .insert({ code, user_id: context.userId });
+      .insert({ code, user_id: context.userId, expires_at: expiresAt });
     if (error) throw new Error(error.message);
     const { telegramBotUsername } = await import("./telegram.server");
     let botUsername: string | null = null;
@@ -59,7 +67,96 @@ export const createTelegramLinkCode = createServerFn({ method: "POST" })
     } catch {
       botUsername = null;
     }
-    return { code, botUsername };
+    return { code, botUsername, expiresAt };
+  });
+
+export type VerifyState =
+  | "connected"
+  | "waiting"
+  | "expired"
+  | "invalid"
+  | "already_used"
+  | "bot_unreachable";
+
+/**
+ * Authoritative server-side check of the linking state. It never trusts the
+ * browser: it reads the code row and the link row written by the webhook.
+ */
+export const verifyTelegramLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ code: z.string().min(4).max(64).optional() }).parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { telegramBotUsername } = await import("./telegram.server");
+
+    let botUsername: string | null = null;
+    let botReachable = true;
+    try {
+      botUsername = await telegramBotUsername();
+    } catch {
+      botReachable = false;
+    }
+
+    const { data: link } = await supabaseAdmin
+      .from("telegram_links")
+      .select("chat_id, username, first_name, linked_at")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+
+    if (link) {
+      return { state: "connected" as VerifyState, botUsername, link, message: "Connected" };
+    }
+
+    if (data.code) {
+      const { data: row } = await supabaseAdmin
+        .from("telegram_link_codes")
+        .select("code, user_id, used_at, expires_at")
+        .eq("code", data.code)
+        .maybeSingle();
+
+      if (!row || row.user_id !== context.userId) {
+        return {
+          state: "invalid" as VerifyState,
+          botUsername,
+          link: null,
+          message: "This code is not valid for your account — generate a new one",
+        };
+      }
+      if (row.used_at) {
+        return {
+          state: "already_used" as VerifyState,
+          botUsername,
+          link: null,
+          message: "This code was already used — generate a new one",
+        };
+      }
+      if (new Date(row.expires_at).getTime() < Date.now()) {
+        return {
+          state: "expired" as VerifyState,
+          botUsername,
+          link: null,
+          message: "This code expired — generate a new one",
+        };
+      }
+    }
+
+    if (!botReachable) {
+      return {
+        state: "bot_unreachable" as VerifyState,
+        botUsername,
+        link: null,
+        message: "The Telegram bot is not reachable right now",
+      };
+    }
+
+    return {
+      state: "waiting" as VerifyState,
+      botUsername,
+      link: null,
+      message: "Waiting for Telegram confirmation",
+    };
   });
 
 export const unlinkTelegram = createServerFn({ method: "POST" })
@@ -67,8 +164,10 @@ export const unlinkTelegram = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("telegram_links").delete().eq("user_id", context.userId);
+    await supabaseAdmin.from("telegram_link_codes").delete().eq("user_id", context.userId);
     return { ok: true as const };
   });
+
 
 /** Live server-side transfer state for the progress UI (no simulated values). */
 export const getJobProgress = createServerFn({ method: "GET" })
