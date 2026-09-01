@@ -206,12 +206,26 @@ function UploadPage() {
         },
       });
       const result = await started;
+      let videoId = result.videoId;
+
+      // Queued to the Local Bot API worker: wait for the server-side transfer.
+      if (!videoId) {
+        while (!videoId) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const job = await readProgress({ data: { idempotencyKey: key } });
+          if (job?.video_id) videoId = job.video_id;
+          else if (job?.status === "failed")
+            throw new Error(job.error_message ?? "The Telegram transfer failed");
+        }
+      }
+
       stop();
-      await applyThumbnail(result.videoId);
-      setPhase({ kind: "done", videoId: result.videoId });
+      await applyThumbnail(videoId);
+      setPhase({ kind: "done", videoId });
       setTransfer(null);
       toast.success("Telegram video uploaded to YouTube");
       setTimeout(() => navigate({ to: "/videos" }), 1200);
+
     } catch (error) {
       stop();
       setTransfer(null);
