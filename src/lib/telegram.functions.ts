@@ -285,7 +285,51 @@ export const importFromTelegram = createServerFn({ method: "POST" })
       error_message: string | null;
     }>) => supabaseAdmin.from("upload_jobs").update(fields).eq("id", jobId);
 
+    // Large-file path: the Local Bot API worker performs the whole transfer.
+    if (process.env["TELEGRAM_WORKER_SECRET"]) {
+      const { startYoutubeResumableSession } = await import("./telegram-queue.server");
+      const total = latest.file_size ?? 0;
+      if (!total) throw new Error("Telegram did not report the file size");
+      try {
+        const uploadUrl = await startYoutubeResumableSession({
+          accessToken: conn.accessToken,
+          totalBytes: total,
+          mimeType: latest.mime_type ?? "video/mp4",
+          title: data.title,
+          description: data.description,
+          tags: data.tags,
+          categoryId: data.categoryId,
+          privacyStatus: data.privacyStatus,
+          publishAt: data.publishAt ?? null,
+          videoType: data.videoType,
+        });
+        await supabaseAdmin
+          .from("upload_jobs")
+          .update({
+            status: "queued",
+            transfer_phase: "queued",
+            upload_url: uploadUrl,
+            total_bytes: total,
+            bytes_transferred: 0,
+            telegram_file_id: latest.file_id,
+            error_message: null,
+          })
+          .eq("id", jobId);
+        return {
+          jobId,
+          videoId: null as string | null,
+          queued: true as const,
+          alreadyUploaded: false as const,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not queue the import";
+        await patch({ status: "failed", transfer_phase: "failed", error_message: message });
+        throw new Error(message);
+      }
+    }
+
     try {
+
       await patch({ transfer_phase: "downloading", bytes_transferred: 0 });
       const { body, size } = await telegramFileStream(latest.file_id);
       const total = latest.file_size ?? size;
