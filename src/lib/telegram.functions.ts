@@ -45,12 +45,20 @@ export const createTelegramLinkCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // A new attempt invalidates every previous unused code for this account.
+    await supabaseAdmin
+      .from("telegram_link_codes")
+      .delete()
+      .eq("user_id", context.userId)
+      .is("used_at", null);
+
     const code = Array.from(crypto.getRandomValues(new Uint8Array(8)))
       .map((b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32])
       .join("");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     const { error } = await supabaseAdmin
       .from("telegram_link_codes")
-      .insert({ code, user_id: context.userId });
+      .insert({ code, user_id: context.userId, expires_at: expiresAt });
     if (error) throw new Error(error.message);
     const { telegramBotUsername } = await import("./telegram.server");
     let botUsername: string | null = null;
@@ -59,7 +67,96 @@ export const createTelegramLinkCode = createServerFn({ method: "POST" })
     } catch {
       botUsername = null;
     }
-    return { code, botUsername };
+    return { code, botUsername, expiresAt };
+  });
+
+export type VerifyState =
+  | "connected"
+  | "waiting"
+  | "expired"
+  | "invalid"
+  | "already_used"
+  | "bot_unreachable";
+
+/**
+ * Authoritative server-side check of the linking state. It never trusts the
+ * browser: it reads the code row and the link row written by the webhook.
+ */
+export const verifyTelegramLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ code: z.string().min(4).max(64).optional() }).parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { telegramBotUsername } = await import("./telegram.server");
+
+    let botUsername: string | null = null;
+    let botReachable = true;
+    try {
+      botUsername = await telegramBotUsername();
+    } catch {
+      botReachable = false;
+    }
+
+    const { data: link } = await supabaseAdmin
+      .from("telegram_links")
+      .select("chat_id, username, first_name, linked_at")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+
+    if (link) {
+      return { state: "connected" as VerifyState, botUsername, link, message: "Connected" };
+    }
+
+    if (data.code) {
+      const { data: row } = await supabaseAdmin
+        .from("telegram_link_codes")
+        .select("code, user_id, used_at, expires_at")
+        .eq("code", data.code)
+        .maybeSingle();
+
+      if (!row || row.user_id !== context.userId) {
+        return {
+          state: "invalid" as VerifyState,
+          botUsername,
+          link: null,
+          message: "This code is not valid for your account — generate a new one",
+        };
+      }
+      if (row.used_at) {
+        return {
+          state: "already_used" as VerifyState,
+          botUsername,
+          link: null,
+          message: "This code was already used — generate a new one",
+        };
+      }
+      if (new Date(row.expires_at).getTime() < Date.now()) {
+        return {
+          state: "expired" as VerifyState,
+          botUsername,
+          link: null,
+          message: "This code expired — generate a new one",
+        };
+      }
+    }
+
+    if (!botReachable) {
+      return {
+        state: "bot_unreachable" as VerifyState,
+        botUsername,
+        link: null,
+        message: "The Telegram bot is not reachable right now",
+      };
+    }
+
+    return {
+      state: "waiting" as VerifyState,
+      botUsername,
+      link: null,
+      message: "Waiting for Telegram confirmation",
+    };
   });
 
 export const unlinkTelegram = createServerFn({ method: "POST" })
@@ -67,8 +164,10 @@ export const unlinkTelegram = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("telegram_links").delete().eq("user_id", context.userId);
+    await supabaseAdmin.from("telegram_link_codes").delete().eq("user_id", context.userId);
     return { ok: true as const };
   });
+
 
 /** Live server-side transfer state for the progress UI (no simulated values). */
 export const getJobProgress = createServerFn({ method: "GET" })
@@ -186,7 +285,51 @@ export const importFromTelegram = createServerFn({ method: "POST" })
       error_message: string | null;
     }>) => supabaseAdmin.from("upload_jobs").update(fields).eq("id", jobId);
 
+    // Large-file path: the Local Bot API worker performs the whole transfer.
+    if (process.env["TELEGRAM_WORKER_SECRET"]) {
+      const { startYoutubeResumableSession } = await import("./telegram-queue.server");
+      const total = latest.file_size ?? 0;
+      if (!total) throw new Error("Telegram did not report the file size");
+      try {
+        const uploadUrl = await startYoutubeResumableSession({
+          accessToken: conn.accessToken,
+          totalBytes: total,
+          mimeType: latest.mime_type ?? "video/mp4",
+          title: data.title,
+          description: data.description,
+          tags: data.tags,
+          categoryId: data.categoryId,
+          privacyStatus: data.privacyStatus,
+          publishAt: data.publishAt ?? null,
+          videoType: data.videoType,
+        });
+        await supabaseAdmin
+          .from("upload_jobs")
+          .update({
+            status: "queued",
+            transfer_phase: "queued",
+            upload_url: uploadUrl,
+            total_bytes: total,
+            bytes_transferred: 0,
+            telegram_file_id: latest.file_id,
+            error_message: null,
+          })
+          .eq("id", jobId);
+        return {
+          jobId,
+          videoId: null as string | null,
+          queued: true as const,
+          alreadyUploaded: false as const,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not queue the import";
+        await patch({ status: "failed", transfer_phase: "failed", error_message: message });
+        throw new Error(message);
+      }
+    }
+
     try {
+
       await patch({ transfer_phase: "downloading", bytes_transferred: 0 });
       const { body, size } = await telegramFileStream(latest.file_id);
       const total = latest.file_size ?? size;
