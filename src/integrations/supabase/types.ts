@@ -147,20 +147,26 @@ export type Database = {
       }
       telegram_link_codes: {
         Row: {
+          chat_id: number | null
           code: string
           created_at: string
+          expires_at: string
           used_at: string | null
           user_id: string
         }
         Insert: {
+          chat_id?: number | null
           code: string
           created_at?: string
+          expires_at?: string
           used_at?: string | null
           user_id: string
         }
         Update: {
+          chat_id?: number | null
           code?: string
           created_at?: string
+          expires_at?: string
           used_at?: string | null
           user_id?: string
         }
@@ -237,8 +243,10 @@ export type Database = {
       }
       upload_jobs: {
         Row: {
+          attempts: number
           bytes_transferred: number
           channel_row_id: string
+          claimed_at: string | null
           created_at: string
           error_message: string | null
           file_name: string | null
@@ -250,6 +258,7 @@ export type Database = {
           scheduled_at: string | null
           source: string
           status: string
+          telegram_file_id: string | null
           total_bytes: number | null
           transfer_phase: string | null
           updated_at: string
@@ -259,8 +268,10 @@ export type Database = {
           video_type: string
         }
         Insert: {
+          attempts?: number
           bytes_transferred?: number
           channel_row_id: string
+          claimed_at?: string | null
           created_at?: string
           error_message?: string | null
           file_name?: string | null
@@ -272,6 +283,7 @@ export type Database = {
           scheduled_at?: string | null
           source?: string
           status?: string
+          telegram_file_id?: string | null
           total_bytes?: number | null
           transfer_phase?: string | null
           updated_at?: string
@@ -281,8 +293,10 @@ export type Database = {
           video_type?: string
         }
         Update: {
+          attempts?: number
           bytes_transferred?: number
           channel_row_id?: string
+          claimed_at?: string | null
           created_at?: string
           error_message?: string | null
           file_name?: string | null
@@ -294,6 +308,7 @@ export type Database = {
           scheduled_at?: string | null
           source?: string
           status?: string
+          telegram_file_id?: string | null
           total_bytes?: number | null
           transfer_phase?: string | null
           updated_at?: string
