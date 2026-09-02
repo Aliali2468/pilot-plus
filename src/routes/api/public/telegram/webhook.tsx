@@ -60,10 +60,22 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
         if (startCode) {
           const { data: codeRow } = await supabaseAdmin
             .from("telegram_link_codes")
-            .select("code, user_id, used_at")
+            .select("code, user_id, used_at, expires_at")
             .eq("code", startCode)
             .maybeSingle();
-          if (codeRow && !codeRow.used_at) {
+
+          const expired = codeRow ? new Date(codeRow.expires_at).getTime() < Date.now() : false;
+
+          // A chat already bound to a different account can never be re-bound.
+          const { data: chatOwner } = await supabaseAdmin
+            .from("telegram_links")
+            .select("user_id")
+            .eq("chat_id", chatId)
+            .maybeSingle();
+          const chatTaken = Boolean(chatOwner && codeRow && chatOwner.user_id !== codeRow.user_id);
+
+          let reply = "That code is not valid. Generate a new one in TubePilot → Settings.";
+          if (codeRow && !codeRow.used_at && !expired && !chatTaken) {
             await supabaseAdmin.from("telegram_links").upsert(
               {
                 user_id: codeRow.user_id,
@@ -75,11 +87,27 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
             );
             await supabaseAdmin
               .from("telegram_link_codes")
-              .update({ used_at: new Date().toISOString() })
-              .eq("code", startCode);
+              .update({ used_at: new Date().toISOString(), chat_id: chatId })
+              .eq("code", startCode)
+              .is("used_at", null);
+            reply = "✅ Connected to TubePilot. Forward a video here to upload it to YouTube.";
+          } else if (chatTaken) {
+            reply = "This Telegram chat is already connected to another TubePilot account.";
+          } else if (codeRow?.used_at) {
+            reply = "That code was already used. Generate a new one in TubePilot → Settings.";
+          } else if (expired) {
+            reply = "That code expired. Generate a new one in TubePilot → Settings.";
+          }
+
+          try {
+            const { telegramApi } = await import("@/lib/telegram.server");
+            await telegramApi("sendMessage", { chat_id: chatId, text: reply });
+          } catch {
+            /* replying is best-effort; the link state is already stored */
           }
           return Response.json({ ok: true });
         }
+
 
         const { data: link } = await supabaseAdmin
           .from("telegram_links")
