@@ -1,0 +1,17 @@
+services:
+  telegram-worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - telegram-data:/var/lib/telegram-bot-api
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  telegram-data:

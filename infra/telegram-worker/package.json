@@ -1,0 +1,14 @@
+{
+  "name": "tubepilot-telegram-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram Local Bot API worker: downloads large Telegram videos server-side and uploads them straight to YouTube.",
+  "main": "src/worker.mjs",
+  "scripts": {
+    "start": "node src/worker.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
