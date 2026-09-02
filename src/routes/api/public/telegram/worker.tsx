@@ -144,7 +144,7 @@ export const Route = createFileRoute("/api/public/telegram/worker")({
                 transfer_phase: "completed",
                 video_id: body.videoId,
                 progress: 100,
-                bytes_transferred: job?.total_bytes ?? undefined,
+                ...(job?.total_bytes ? { bytes_transferred: job.total_bytes } : {}),
                 error_message: null,
               })
               .eq("id", body.jobId);
