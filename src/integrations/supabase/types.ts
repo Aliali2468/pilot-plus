@@ -404,6 +404,45 @@ export type Database = {
           },
         ]
       }
+      worker_heartbeats: {
+        Row: {
+          bot_api_ready: boolean
+          completed: number
+          current_job_id: string | null
+          details: Json
+          failed: number
+          last_error: string | null
+          started_at: string | null
+          updated_at: string
+          version: string | null
+          worker_id: string
+        }
+        Insert: {
+          bot_api_ready?: boolean
+          completed?: number
+          current_job_id?: string | null
+          details?: Json
+          failed?: number
+          last_error?: string | null
+          started_at?: string | null
+          updated_at?: string
+          version?: string | null
+          worker_id: string
+        }
+        Update: {
+          bot_api_ready?: boolean
+          completed?: number
+          current_job_id?: string | null
+          details?: Json
+          failed?: number
+          last_error?: string | null
+          started_at?: string | null
+          updated_at?: string
+          version?: string | null
+          worker_id?: string
+        }
+        Relationships: []
+      }
       youtube_channels: {
         Row: {
           channel_id: string
