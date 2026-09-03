@@ -135,7 +135,7 @@ export const Route = createFileRoute("/api/public/telegram/worker")({
               failed: body.failed ?? 0,
               last_error: body.lastError ?? null,
               started_at: body.startedAt ?? null,
-              details: (body.details ?? {}) as Record<string, unknown>,
+              details: JSON.parse(JSON.stringify(body.details ?? {})),
               updated_at: new Date().toISOString(),
             },
             { onConflict: "worker_id" },
