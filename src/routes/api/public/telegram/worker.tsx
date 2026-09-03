@@ -27,6 +27,18 @@ const completeSchema = z.object({
   error: z.string().max(2000).optional(),
 });
 
+const heartbeatSchema = z.object({
+  workerId: z.string().min(1).max(80),
+  version: z.string().max(40).optional(),
+  botApiReady: z.boolean(),
+  currentJobId: z.string().uuid().nullish(),
+  completed: z.number().int().nonnegative().optional(),
+  failed: z.number().int().nonnegative().optional(),
+  lastError: z.string().max(2000).nullish(),
+  startedAt: z.string().max(40).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const Route = createFileRoute("/api/public/telegram/worker")({
   server: {
     handlers: {
