@@ -123,6 +123,26 @@ export const Route = createFileRoute("/api/public/telegram/worker")({
           });
         }
 
+        if (action === "heartbeat") {
+          const body = heartbeatSchema.parse(await request.json());
+          await supabaseAdmin.from("worker_heartbeats").upsert(
+            {
+              worker_id: body.workerId,
+              version: body.version ?? null,
+              bot_api_ready: body.botApiReady,
+              current_job_id: body.currentJobId ?? null,
+              completed: body.completed ?? 0,
+              failed: body.failed ?? 0,
+              last_error: body.lastError ?? null,
+              started_at: body.startedAt ?? null,
+              details: (body.details ?? {}) as Record<string, unknown>,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "worker_id" },
+          );
+          return Response.json({ ok: true });
+        }
+
         if (action === "progress") {
           const body = progressSchema.parse(await request.json());
           const total = body.totalBytes ?? 0;
