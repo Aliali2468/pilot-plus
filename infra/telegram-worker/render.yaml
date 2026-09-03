@@ -1,0 +1,31 @@
+# One-click deploy blueprint for the TubePilot Telegram large-file service.
+#
+# Deploy: https://render.com/deploy?repo=<your-git-repo-url>
+# Render reads this file, builds the Dockerfile in this folder, attaches a
+# persistent disk for downloaded media, and keeps the process running 24/7.
+# You never run `docker compose` and your computer does not need to be online.
+services:
+  - type: worker
+    name: tubepilot-telegram-worker
+    runtime: docker
+    plan: starter # needs a paid plan: persistent disk + always-on process
+    rootDir: infra/telegram-worker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    disk:
+      name: telegram-media
+      mountPath: /var/lib/telegram-bot-api
+      sizeGB: 20
+    envVars:
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WORKER_SECRET
+        sync: false
+      - key: TUBEPILOT_BASE_URL
+        value: https://pilot-plus.lovable.app
+      - key: WORKER_ID
+        value: tubepilot-telegram-worker

@@ -23,6 +23,9 @@ const WORKER_SECRET = env("TELEGRAM_WORKER_SECRET");
 const PORT = Number(env("PORT", "8080"));
 const POLL_INTERVAL_MS = Number(env("POLL_INTERVAL_MS", "3000"));
 const PROGRESS_INTERVAL_MS = Number(env("PROGRESS_INTERVAL_MS", "1500"));
+const HEARTBEAT_INTERVAL_MS = Number(env("HEARTBEAT_INTERVAL_MS", "20000"));
+const WORKER_VERSION = env("WORKER_VERSION", "1.1.0");
+const WORKER_ID = env("WORKER_ID", `telegram-worker-${process.env.HOSTNAME ?? "default"}`);
 
 for (const [name, value] of Object.entries({
   TELEGRAM_BOT_TOKEN: BOT_TOKEN,
@@ -184,6 +187,24 @@ async function loop() {
   }
 }
 
+async function heartbeat() {
+  try {
+    await control("heartbeat", {
+      workerId: WORKER_ID,
+      version: WORKER_VERSION,
+      botApiReady: state.botApiReady,
+      currentJobId: state.currentJobId,
+      completed: state.completed,
+      failed: state.failed,
+      lastError: state.lastError,
+      startedAt: state.startedAt,
+      details: { lastPollAt: state.lastPollAt, localApi: LOCAL_API },
+    });
+  } catch (error) {
+    console.error(`[worker] heartbeat failed: ${error.message}`);
+  }
+}
+
 async function checkBotApi() {
   try {
     await botApi("getMe");
@@ -206,5 +227,7 @@ createServer((req, res) => {
 
 await checkBotApi();
 setInterval(checkBotApi, 30_000);
+await heartbeat();
+setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
 console.log(`[worker] polling ${CONTROL_URL}`);
 loop();

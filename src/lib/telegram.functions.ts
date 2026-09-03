@@ -425,3 +425,58 @@ export const importFromTelegram = createServerFn({ method: "POST" })
       throw new Error(message);
     }
   });
+
+/** Infrastructure health for Settings → System status. */
+export const getWorkerStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const configErrors: string[] = [];
+    if (!process.env["TELEGRAM_WORKER_SECRET"]) {
+      configErrors.push(
+        "TELEGRAM_WORKER_SECRET is not set — the large-file worker cannot authenticate.",
+      );
+    }
+
+    const [{ data: worker }, { data: jobs }] = await Promise.all([
+      supabaseAdmin
+        .from("worker_heartbeats")
+        .select("worker_id, version, bot_api_ready, current_job_id, completed, failed, last_error, started_at, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("upload_jobs")
+        .select("id, status, transfer_phase, file_name, progress, bytes_transferred, total_bytes")
+        .eq("source", "telegram")
+        .in("status", ["queued", "uploading"])
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+
+    const lastHeartbeat = worker?.updated_at ?? null;
+    const online = Boolean(lastHeartbeat && Date.now() - new Date(lastHeartbeat).getTime() < 90_000);
+    if (!worker) {
+      configErrors.push("No worker has ever reported in — deploy the Telegram transfer service.");
+    } else if (!online) {
+      configErrors.push("The worker stopped sending heartbeats (offline for more than 90 seconds).");
+    } else if (!worker.bot_api_ready) {
+      configErrors.push("The worker is running but the Local Bot API server is not answering.");
+    }
+    if (worker?.last_error) configErrors.push(`Last worker error: ${worker.last_error}`);
+
+    return {
+      online,
+      localBotApi: Boolean(online && worker?.bot_api_ready),
+      version: worker?.version ?? null,
+      workerId: worker?.worker_id ?? null,
+      lastHeartbeat,
+      startedAt: worker?.started_at ?? null,
+      completed: worker?.completed ?? 0,
+      failed: worker?.failed ?? 0,
+      currentJobId: worker?.current_job_id ?? null,
+      jobs: jobs ?? [],
+      fallbackActive: !online,
+      configErrors,
+    };
+  });
