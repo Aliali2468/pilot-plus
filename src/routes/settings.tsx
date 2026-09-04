@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useDisconnectChannel, useSyncChannel, useYoutubeStatus } from "@/hooks/useYoutube";
 
-export const Route = createFileRoute("/_authenticated/settings")({
+export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
       { title: "Settings — TubePilot" },

@@ -15,7 +15,7 @@ import {
   useYoutubeStatus,
 } from "@/hooks/useYoutube";
 
-export const Route = createFileRoute("/_authenticated/dashboard")({
+export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — TubePilot" },
