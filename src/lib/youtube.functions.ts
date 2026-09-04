@@ -1,11 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
 export const getYoutubeStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { data, error } = await context.supabase
       .from("youtube_channels")
       .select("*")
@@ -16,9 +14,9 @@ export const getYoutubeStatus = createServerFn({ method: "GET" })
   });
 
 export const startYoutubeOAuth = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ origin: z.string() }).parse(d))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { YOUTUBE_SCOPES, redirectUriFor, googleClientCredentials } = await import(
       "./youtube.server"
     );
@@ -43,8 +41,8 @@ export const startYoutubeOAuth = createServerFn({ method: "POST" })
   });
 
 export const syncChannel = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const conn = await getActiveConnection(context.userId);
@@ -72,9 +70,9 @@ export const syncChannel = createServerFn({ method: "POST" })
   });
 
 export const disconnectChannel = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ channelRowId: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { error } = await context.supabase
       .from("youtube_channels")
       .delete()
@@ -85,13 +83,13 @@ export const disconnectChannel = createServerFn({ method: "POST" })
   });
 
 export const listVideos = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({ pageToken: z.string().optional(), search: z.string().optional() })
       .parse(d ?? {}),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     const search = await youtubeApi<any>(conn.accessToken, "/search", {
@@ -159,7 +157,6 @@ export const listVideos = createServerFn({ method: "GET" })
   });
 
 export const updateVideo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -173,7 +170,8 @@ export const updateVideo = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     const status: Record<string, unknown> = { privacyStatus: data.privacyStatus };
@@ -198,9 +196,9 @@ export const updateVideo = createServerFn({ method: "POST" })
   });
 
 export const deleteVideo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ videoId: z.string().min(1) }).parse(d))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     await youtubeApi(conn.accessToken, "/videos", {
@@ -211,7 +209,6 @@ export const deleteVideo = createServerFn({ method: "POST" })
   });
 
 export const setThumbnail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -221,7 +218,8 @@ export const setThumbnail = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     const bytes = Buffer.from(data.base64, "base64");
@@ -244,8 +242,8 @@ export const setThumbnail = createServerFn({ method: "POST" })
   });
 
 export const listPlaylists = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     const res = await youtubeApi<any>(conn.accessToken, "/playlists", {
@@ -264,7 +262,6 @@ export const listPlaylists = createServerFn({ method: "GET" })
   });
 
 export const createPlaylist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -274,7 +271,8 @@ export const createPlaylist = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     await youtubeApi(conn.accessToken, "/playlists", {
@@ -289,9 +287,9 @@ export const createPlaylist = createServerFn({ method: "POST" })
   });
 
 export const deletePlaylist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ playlistId: z.string().min(1) }).parse(d))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     await youtubeApi(conn.accessToken, "/playlists", {
@@ -302,11 +300,11 @@ export const deletePlaylist = createServerFn({ method: "POST" })
   });
 
 export const addVideoToPlaylist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({ playlistId: z.string().min(1), videoId: z.string().min(1) }).parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     await youtubeApi(conn.accessToken, "/playlistItems", {
@@ -323,7 +321,6 @@ export const addVideoToPlaylist = createServerFn({ method: "POST" })
   });
 
 export const createUploadSession = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -345,7 +342,8 @@ export const createUploadSession = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection } = await import("./youtube.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const conn = await getActiveConnection(context.userId);
@@ -437,9 +435,9 @@ export const createUploadSession = createServerFn({ method: "POST" })
  * the finished video resource on 200/201, or 308 when bytes are still missing.
  */
 export const reconcileUpload = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ jobId: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -534,7 +532,6 @@ export const reconcileUpload = createServerFn({ method: "POST" })
   });
 
 export const completeUpload = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -545,7 +542,8 @@ export const completeUpload = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { error } = await context.supabase
       .from("upload_jobs")
       .update({
@@ -562,8 +560,8 @@ export const completeUpload = createServerFn({ method: "POST" })
 
 
 export const listUploadJobs = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { data, error } = await context.supabase
       .from("upload_jobs")
       .select("*")
@@ -575,9 +573,9 @@ export const listUploadJobs = createServerFn({ method: "GET" })
   });
 
 export const getAnalytics = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ days: z.number().default(28) }).parse(d ?? {}))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { getActiveConnection, youtubeApi } = await import("./youtube.server");
     const conn = await getActiveConnection(context.userId);
     const end = new Date();
