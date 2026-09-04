@@ -1,12 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
 /** Link state, bot handle and the latest media message the bot received. */
 export const getTelegramStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { telegramBotUsername } = await import("./telegram.server");
 
@@ -42,8 +40,8 @@ export const getTelegramStatus = createServerFn({ method: "GET" })
 
 /** One-time code the user sends to the bot as "/start <code>" to link the chat. */
 export const createTelegramLinkCode = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // A new attempt invalidates every previous unused code for this account.
     await supabaseAdmin
@@ -83,11 +81,11 @@ export type VerifyState =
  * browser: it reads the code row and the link row written by the webhook.
  */
 export const verifyTelegramLink = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({ code: z.string().min(4).max(64).optional() }).parse(d ?? {}),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { telegramBotUsername } = await import("./telegram.server");
 
@@ -160,8 +158,8 @@ export const verifyTelegramLink = createServerFn({ method: "POST" })
   });
 
 export const unlinkTelegram = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async () => {
+    const context = (await import("./owner.server")).ownerContext();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("telegram_links").delete().eq("user_id", context.userId);
     await supabaseAdmin.from("telegram_link_codes").delete().eq("user_id", context.userId);
@@ -171,7 +169,6 @@ export const unlinkTelegram = createServerFn({ method: "POST" })
 
 /** Live server-side transfer state for the progress UI (no simulated values). */
 export const getJobProgress = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -180,7 +177,8 @@ export const getJobProgress = createServerFn({ method: "GET" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let query = supabaseAdmin
       .from("upload_jobs")
@@ -200,7 +198,6 @@ export const getJobProgress = createServerFn({ method: "GET" })
  * upload URL while byte counts are written to the job row for real progress.
  */
 export const importFromTelegram = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -215,7 +212,8 @@ export const importFromTelegram = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
+    const context = (await import("./owner.server")).ownerContext();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { getActiveConnection } = await import("./youtube.server");
     const { telegramFileStream } = await import("./telegram.server");
@@ -428,7 +426,6 @@ export const importFromTelegram = createServerFn({ method: "POST" })
 
 /** Infrastructure health for Settings → System status. */
 export const getWorkerStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const configErrors: string[] = [];

@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useVideos, useYoutubeStatus } from "@/hooks/useYoutube";
 import { deleteVideo, setThumbnail, updateVideo } from "@/lib/youtube.functions";
 
-export const Route = createFileRoute("/_authenticated/videos")({
+export const Route = createFileRoute("/videos")({
   head: () => ({
     meta: [
       { title: "Videos — TubePilot" },

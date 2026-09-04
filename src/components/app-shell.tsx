@@ -1,10 +1,9 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
   LayoutDashboard,
   ListVideo,
-  LogOut,
   Menu,
   PlaySquare,
   Settings,
@@ -15,8 +14,6 @@ import { useState, type ReactNode } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useYoutubeStatus } from "@/hooks/useYoutube";
 import { cn } from "@/lib/utils";
 
@@ -98,26 +95,14 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    navigate({ to: "/auth" });
-  };
 
   const sidebar = (onNavigate?: () => void) => (
     <div className="flex h-full flex-col gap-6 p-4">
       <Brand />
       <ChannelBadge />
       <NavLinks onNavigate={onNavigate} />
-      <div className="mt-auto space-y-3">
-        <p className="truncate px-1 text-xs text-muted-foreground">{user?.email}</p>
-        <Button variant="secondary" className="w-full justify-start gap-2" onClick={signOut}>
-          <LogOut className="h-4 w-4" /> Sign out
-        </Button>
-      </div>
+      <div className="mt-auto px-1 text-xs text-muted-foreground">Private installation</div>
     </div>
   );
 

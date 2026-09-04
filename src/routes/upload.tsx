@@ -26,7 +26,7 @@ import { getJobProgress, importFromTelegram } from "@/lib/telegram.functions";
 import { useTelegramStatus } from "@/hooks/useTelegram";
 
 
-export const Route = createFileRoute("/_authenticated/upload")({
+export const Route = createFileRoute("/upload")({
   head: () => ({
     meta: [
       { title: "Upload — TubePilot" },

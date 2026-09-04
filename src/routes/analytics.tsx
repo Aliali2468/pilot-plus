@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAnalytics, useYoutubeStatus } from "@/hooks/useYoutube";
 
-export const Route = createFileRoute("/_authenticated/analytics")({
+export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
       { title: "Analytics — TubePilot" },

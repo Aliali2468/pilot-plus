@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { usePlaylists, useYoutubeStatus } from "@/hooks/useYoutube";
 import { createPlaylist, deletePlaylist } from "@/lib/youtube.functions";
 
-export const Route = createFileRoute("/_authenticated/playlists")({
+export const Route = createFileRoute("/playlists")({
   head: () => ({
     meta: [
       { title: "Playlists — TubePilot" },
